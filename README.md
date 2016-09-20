@@ -1,6 +1,17 @@
 FWeather
 ========
-![Icon](https://raw2.github.com/frakbot/FWeather/develop/FWeather/src/main/res/drawable-xhdpi/ic_launcher.png)
+![Icon](https://github.com/Alia5/FWeather/blob/master/FWeather/src/main/res/drawable-xxhdpi/ic_launcher.png?raw=true)
+
+========
+### This is an updated version of the original **FWeather** which works again!
+
+I won't probably fix any bugs or add new features, but will most likely keep this working, as I really like the widget.
+
+However, if you are willing to contribute I'd be happy to merge your changes!
+
+========
+
+
 
 **FWeather** is a weather widget for Android based upon Tobias van Scheider's
 [Authentic Weather](http://www.behance.net/gallery/Authentic-Weather/7196565) design.
@@ -23,21 +34,15 @@ The widget supports [a few languages](#translating-fweather), but if you want
 to contribute a translation you just have to issue a pull request
 (remember to work on the develop branch!). Feedback is always welcome :)
 
-You can also find FWeather **[on XDA-Developers](http://forum.xda-developers.com/showthread.php?t=2346105)**!
+You can also find the original threas to FWeather **[on XDA-Developers](http://forum.xda-developers.com/showthread.php?t=2346105)**!
 
 
 ## Screenshots
 ![On the homescreen](http://hostr.co/file/JSS1T9zM56uG/2013-07-01-01.29.15_w400.png)
 
 ## Download
-You can download **FWeather** from the Google Play Store:
 
-[![Google Play Store](https://developer.android.com/images/brand/en_generic_rgb_wo_60.png)](https://play.google.com/store/apps/details?id=net.frakbot.FWeather)
-
-Please note that we're also running a **public beta** through the Google Play Store.
-If you want to help us out and test new features, you can read the instructions
-[in the wiki](https://github.com/frakbot/FWeather/wiki/Joining-the-beta).
-
+The original download was pulled from Google-Play a long time ago... But you can download a working .apk file **[here](https://github.com/Alia5/FWeather/releases/tag/Takeover)**
 
 ## Translating FWeather
 You can contribute to the FWeather translation in your own language.
