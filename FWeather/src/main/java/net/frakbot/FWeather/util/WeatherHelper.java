@@ -20,6 +20,8 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -34,6 +36,8 @@ import net.frakbot.util.log.FLog;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 
 import static net.frakbot.FWeather.updater.weather.YahooWeatherApiClient.getLocationInfo;
 
@@ -80,7 +84,7 @@ public class WeatherHelper {
             mCacheDataRead = true;
         }
 
-        WeatherData weather;
+        WeatherData weather = null;
 
         if (!checkNetwork(context)) {
             FLog.w(TAG, "No network seems to be available!");
@@ -111,14 +115,13 @@ public class WeatherHelper {
             FLog.d(TAG, "Using manual location WOEID");
             YahooWeatherApiClient.LocationInfo locationInfo = new YahooWeatherApiClient.LocationInfo();
             locationInfo.woeids = Arrays.asList(manualLocationWoeid);
-            weather = getWeatherDataForLocationInfo(locationInfo);
+            weather = getWeatherDataForManualLocation(context, manualLocationWoeid);
         }
         else {
             // Get the current location
             final Location location = getLocation(context);
 
             if (location == null) {
-                TrackerHelper.sendException(context, "No location found", false);
                 FLog.e(context, TAG, "No location available, can't update");
 
                 WeatherData errWeather = new WeatherData();
@@ -126,7 +129,7 @@ public class WeatherHelper {
                 return errWeather;
             }
 
-            weather = getWeatherDataForLocation(location);
+            weather = getWeatherDataForLocation(context, location);
         }
 
         FLog.i(context, TAG, "Weather update done");
@@ -304,11 +307,11 @@ public class WeatherHelper {
         return System.currentTimeMillis() - mCachedWeatherTimestamp;
     }
 
-    private static WeatherData getWeatherDataForLocation(Location location) {
+    private static WeatherData getWeatherDataForLocation(Context context, Location location) {
         WeatherData weatherData = null;
         try {
             FLog.d(TAG, "Using location: " + location.getLatitude() + "," + location.getLongitude());
-            weatherData = getWeatherWithRetry(getLocationInfoWithRetry(location));
+            weatherData = getWeatherWithRetry(location);
         }
         catch (CantGetWeatherException e) {
             FLog.e(TAG, "Unable to retrieve weather", e);
@@ -316,9 +319,21 @@ public class WeatherHelper {
         return weatherData;
     }
 
-    private static WeatherData getWeatherDataForLocationInfo(YahooWeatherApiClient.LocationInfo location) {
+    private static WeatherData getWeatherDataForManualLocation(Context context, String location) {
+        WeatherData weatherData = null;
         try {
-            FLog.d(TAG, "Using manual location. WOEIDs count: " + location.woeids.size());
+            FLog.d(TAG, "Using location: " + location);
+            weatherData = getWeatherWithRetryManual(location);
+        }
+        catch (CantGetWeatherException e) {
+            FLog.e(TAG, "Unable to retrieve weather", e);
+        }
+        return weatherData;
+    }
+
+    private static WeatherData getWeatherDataForLocationInfo(Location location) {
+        try {
+            //FLog.d(TAG, "Using manual location. WOEIDs count: " + location.woeids.size());
             return getWeatherWithRetry(location);
         }
         catch (CantGetWeatherException e) {
@@ -331,13 +346,43 @@ public class WeatherHelper {
         }
     }
 
+
+
     /**
      * Internal method to retry weather fetching from the Yahoo weather provider.
      * @param location  The {@link net.frakbot.FWeather.updater.weather.YahooWeatherApiClient.LocationInfo}
      * @return          The {@link net.frakbot.FWeather.updater.weather.model.WeatherData} containing weather information
      * @throws CantGetWeatherException  If there's some network error
      */
-    private static WeatherData getWeatherWithRetry(YahooWeatherApiClient.LocationInfo location)
+    private static WeatherData getWeatherWithRetryManual(String location)
+            throws CantGetWeatherException {
+        CantGetWeatherException lastException = null;
+        for (int i = 0; i < Const.Thresholds.MAX_FETCH_WEATHER_ATTEMPTS; i++) {
+            try {
+                WeatherData weatherData = YahooWeatherApiClient.getWeatherForManualLocation(location);
+                return weatherData;
+            } catch (CantGetWeatherException e) {
+                FLog.w(TAG, String.format(
+                        "Weather fetching attempt number %d has failed. %d attempts remaining.",
+                        i+1, Const.Thresholds.MAX_FETCH_WEATHER_ATTEMPTS-i-1));
+                // Save the last exception for me
+                lastException = e;
+            }
+        }
+        FLog.e(TAG, String.format(
+                "Maximum number (%d) of weather fetching attempts reached. Giving up.",
+                Const.Thresholds.MAX_FETCH_WEATHER_ATTEMPTS));
+        // If we are here, it means that MAX_FETCH_WEATHER_ATTEMPTS have been made without a result, give up!
+        throw lastException;
+    }
+
+    /**
+     * Internal method to retry weather fetching from the Yahoo weather provider.
+     * @param location  The {@link net.frakbot.FWeather.updater.weather.YahooWeatherApiClient.LocationInfo}
+     * @return          The {@link net.frakbot.FWeather.updater.weather.model.WeatherData} containing weather information
+     * @throws CantGetWeatherException  If there's some network error
+     */
+    private static WeatherData getWeatherWithRetry(Location location)
             throws CantGetWeatherException {
         CantGetWeatherException lastException = null;
         for (int i = 0; i < Const.Thresholds.MAX_FETCH_WEATHER_ATTEMPTS; i++) {

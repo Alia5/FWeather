@@ -39,7 +39,7 @@
     <string name="weather_rainy_05"><![CDATA[Go <font color="%%COLOR%%">sing</font> in the fucking rain.]]></string>
     <string name="weather_rainy_06"><![CDATA[Stay the fuck <font color="%%COLOR%%">indoors</font>.]]></string>
 
-    <string name="weather_cloudy"><![CDATA[Just fucking <font color="%%COLOR%%">grey.</font>]]></string>
+    <string name="weather_cloudy"><![CDATA[Fucking fifty shades of <font color="%%COLOR%%">grey.</font>]]></string>
     <string name="weather_thunderstorm">
         <![CDATA[Hell\'s fucking <font color="%%COLOR%%">thunder fury.</font>]]></string>
     <string name="weather_haze"><![CDATA[<font color="%%COLOR%%">Can\'t see</font> a damn thing.]]></string>

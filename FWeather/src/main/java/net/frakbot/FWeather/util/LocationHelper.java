@@ -16,10 +16,12 @@
 
 package net.frakbot.FWeather.util;
 
+import android.Manifest;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.IntentSender;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationManager;
@@ -29,12 +31,17 @@ import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.ActivityCompat;
 import android.text.TextUtils;
+
 import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GooglePlayServicesClient;
 import com.google.android.gms.common.GooglePlayServicesUtil;
-import com.google.android.gms.location.LocationClient;
+import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationServices;
+
 import net.frakbot.global.Const;
 import net.frakbot.util.log.FLog;
 
@@ -57,7 +64,7 @@ public class LocationHelper {
     private static Handler mHandler = new Handler();
     private static boolean hasPlayServices;
 
-    private static LocationClient mLocationClient;
+    private static GoogleApiClient mGoogleApiClient;
     private static LocationManager mLocationManager;
     private static boolean isConnected;
 
@@ -106,19 +113,27 @@ public class LocationHelper {
     private void bootstrapLocationHelper() {
         FLog.d(TAG, "Bootstrapping location provider. Using Play Services: " + hasPlayServices);
         if (hasPlayServices) {
-            // Setup the listener
-            mLocationClientListener = new LocationClientListener();
 
-            try {
-                mLocationClient = new LocationClient(mContext, mLocationClientListener, mLocationClientListener);
-                FLog.v(TAG, "Connecting to the Play Services' Location Client...");
-                mLocationClient.connect();
+            mLocationManager = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+            mLocationClientListener = new LocationClientListener();
+            mLocationManagerListener = new LocationManagerListener();
+            // Create an instance of GoogleAPIClient.
+            if (mGoogleApiClient == null) {
+                mGoogleApiClient = new GoogleApiClient.Builder(mContext)
+                        .addConnectionCallbacks(mLocationClientListener)
+                        .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
+                            @Override
+                            public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+                            }
+                        })
+                        .addApi(LocationServices.API)
+                        .build();
             }
-            catch (NoSuchMethodError e) {
-                FLog.e(TAG, "Unable to connect to the Google Play Services. Falling back to old-school stuff", e);
-                switchToCompatibilityMode();
-            }
+
+            mGoogleApiClient.connect();
         } else {
+            mLocationManagerListener = new LocationManagerListener();
             mLocationManager = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
 
             final Criteria criteria = getDefaultCriteria();
@@ -130,10 +145,19 @@ public class LocationHelper {
             }
 
             // Setup the listener
-            mLocationManagerListener = new LocationManagerListener();
             FLog.v(TAG, "Requesting a single update to the system LocationManager...");
+            if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
             mLocationManager.requestLocationUpdates(provider, getMinUpdateInterval(), 0,
-                                                    mLocationManagerListener, Looper.myLooper());
+                    mLocationManagerListener, Looper.myLooper());
         }
 
         // At this point, either mLocationClient or mLocationManager are doing their initialization stuff
@@ -147,8 +171,8 @@ public class LocationHelper {
             value = 300;
             try {
                 sp.edit().putString(Const.Preferences.SYNC_FREQUENCY, "300").commit();
+            } catch (Exception ignored) {
             }
-            catch (Exception ignored) {}
         }
         return value * 1000;
     }
@@ -167,7 +191,7 @@ public class LocationHelper {
      * location is null too, the pending intent will be started when the first update is got.
      *
      * @param pendingIntent PendingIntent to be called on the first update
-     * @return              the last known Location
+     * @return the last known Location
      * @see "http://www.youtube.com/watch?v=2UNj5Oqs29g"
      */
     public static Location getLastKnownSurroundings(PendingIntent pendingIntent)
@@ -196,16 +220,16 @@ public class LocationHelper {
         // Check if the passive location providers are enabled (this is useful when debugging!)
         if (!isLowPowerLocationProviderEnabled()) {
             FLog.w(TAG, "Low-power location providers are not active/available!\n" +
-                        "We'll only be able to use the GPS (if available)");
+                    "We'll only be able to use the GPS (if available)");
         }
 
         // Check if the Location Services are active (this might have been changed
         // since the last update went on) -- the location client has to be connected
         // whenever Play Services are available and we are updating!
-        if (hasPlayServices && !mLocationClient.isConnected()) {
+        if (hasPlayServices && !mGoogleApiClient.isConnected()) {
             FLog.w(TAG, String.format("The location client is not connected yet!.\n" +
-                                      "\t> HasPlayServices: %s, connected: %s",
-                                      hasPlayServices, mLocationClient.isConnected()));
+                            "\t> HasPlayServices: %s, connected: %s",
+                    hasPlayServices, mGoogleApiClient.isConnected()));
             return false;
         }
 
@@ -216,24 +240,23 @@ public class LocationHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             try {
                 int activeMode = Settings.Secure.getInt(mContext.getContentResolver(),
-                                                        Settings.Secure.LOCATION_MODE);
+                        Settings.Secure.LOCATION_MODE);
                 return (activeMode & Settings.Secure.LOCATION_MODE_BATTERY_SAVING) != 0;
-            }
-            catch (Settings.SettingNotFoundException e) {
+            } catch (Settings.SettingNotFoundException e) {
                 FLog.w(TAG, "Unable to detect the location mode using the new 4.4+ APIs, " +
-                            "falling back on the old ones.");
+                        "falling back on the old ones.");
                 return false;
             }
         }
 
         @SuppressWarnings("deprecation")
         String availProviders =
-            Settings.Secure.getString(mContext.getContentResolver(),
-                                      Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
+                Settings.Secure.getString(mContext.getContentResolver(),
+                        Settings.Secure.LOCATION_PROVIDERS_ALLOWED);
 
         return availProviders != null &&
-               (availProviders.contains(LocationManager.NETWORK_PROVIDER) ||
-                availProviders.contains(LocationManager.PASSIVE_PROVIDER));
+                (availProviders.contains(LocationManager.NETWORK_PROVIDER) ||
+                        availProviders.contains(LocationManager.PASSIVE_PROVIDER));
     }
 
     /**
@@ -257,16 +280,16 @@ public class LocationHelper {
 
     private class LocationClientListener implements
             com.google.android.gms.location.LocationListener,
-            GooglePlayServicesClient.ConnectionCallbacks,
-            GooglePlayServicesClient.OnConnectionFailedListener {
+            GoogleApiClient.ConnectionCallbacks,
+            GoogleApiClient.OnConnectionFailedListener {
 
         @Override
         public void onConnected(Bundle bundle) {
-            if (!mLocationClient.isConnected()) {
+            if (!mGoogleApiClient.isConnected()) {
                 // Strange shit happens here sometimes...
                 FLog.w(mContext, TAG,
-                       "LocationClient's onConnected was called, but the LocationClient is not connected. WTF!");
-                onDisconnected();
+                        "LocationClient's onConnected was called, but the LocationClient is not connected. WTF!");
+                onConnectionSuspended(0);
             }
 
             // The LocationClient has connected
@@ -276,12 +299,27 @@ public class LocationHelper {
             request.setPriority(LocationRequest.PRIORITY_LOW_POWER);
             request.setFastestInterval(getMinUpdateInterval());
             FLog.v(TAG, "Requesting updates to the Play Services' Location Client...");
-            mLocationClient.requestLocationUpdates(request, this);
+
+            final Criteria criteria = getDefaultCriteria();
+            final String provider = mLocationManager.getBestProvider(criteria, true);
+
+            if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return;
+            }
+            mLocationManager.requestLocationUpdates(provider, getMinUpdateInterval(), 0,
+                    mLocationManagerListener, Looper.myLooper());
 
             mPlayServicesConnRetriesLeft = PLAY_SERVICES_CONNECTION_RETRIES;
             onGenericConnected();
 
-            Location currentLocation = mLocationClient.getLastLocation();
+            Location currentLocation = mLocationManager.getLastKnownLocation(provider);
             if (currentLocation != null) {
                 updateLocation(currentLocation);
             }
@@ -292,24 +330,25 @@ public class LocationHelper {
         }
 
         @Override
-        public void onLocationChanged(Location location) {
-            cancelUpdateTimeout();
-            updateLocation(location);
-            mLocationClient.removeLocationUpdates(this);
-        }
-
-        @Override
-        public void onDisconnected() {
+        public void onConnectionSuspended(int i) {
             cancelUpdateTimeout();
             onGenericDisconnected();
 
             FLog.i(mContext, TAG, "Trying to reconnect the LocationClient...");
             try {
-                mLocationClient.connect();
+                mGoogleApiClient.connect();
             } catch (Exception e) {
                 FLog.w(mContext, TAG, "Unable to reconnect. Is Play Services borked?", e);
             }
         }
+
+        @Override
+        public void onLocationChanged(Location location) {
+            cancelUpdateTimeout();
+            updateLocation(location);
+            LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
+        }
+
 
         @Override
         public void onConnectionFailed(ConnectionResult connectionResult) {
@@ -323,14 +362,14 @@ public class LocationHelper {
             if (mPlayServicesConnRetriesLeft > 0) {
                 FLog.i(mContext, TAG, "Trying to reconnect the LocationClient after this error: " + connectionResult +
                                       "\n\t> Retries left: " + mPlayServicesConnRetriesLeft);
-                mLocationClient.connect();
+                mGoogleApiClient.connect();
             }
             else {
                 FLog.e(TAG, "Unable to connect to the LocationClient after " + PLAY_SERVICES_CONNECTION_RETRIES +
                             " retries. Switching to compatibility mode.");
-                mLocationClient.unregisterConnectionCallbacks(this);
-                mLocationClient.unregisterConnectionFailedListener(this);
-                mLocationClient = null;
+                mGoogleApiClient.unregisterConnectionCallbacks(this);
+                mGoogleApiClient.unregisterConnectionFailedListener(this);
+                mGoogleApiClient = null;
                 mLocationClientListener = null;
                 switchToCompatibilityMode();
             }

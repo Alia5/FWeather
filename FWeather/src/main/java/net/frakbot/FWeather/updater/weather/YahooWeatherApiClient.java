@@ -77,22 +77,213 @@ public class YahooWeatherApiClient {
         sWeatherUnits = weatherUnits;
     }
 
-    public static WeatherData getWeatherForLocationInfo(LocationInfo locationInfo)
+    public static WeatherData getWeatherForLocationInfo(Location location)
             throws CantGetWeatherException {
         // Loop through the woeids (they're in descending precision order) until weather data
         // is found.
-        for (String woeid : locationInfo.woeids) {
-            FLog.d(TAG, "Trying WOEID: " + woeid);
-            WeatherData data = YahooWeatherApiClient.getWeatherForWoeid(woeid, locationInfo.town);
+            WeatherData data = YahooWeatherApiClient.getWeatherForCoords(location.getLatitude(), location.getLongitude());
             if (data != null
                     && data.conditionCode != WeatherData.INVALID_CONDITION
                     && data.temperature != WeatherData.INVALID_TEMPERATURE) {
                 return data;
             }
-        }
+
 
         // No weather could be found :(
         throw new CantGetWeatherException(true, R.string.no_weather_data);
+    }
+
+
+    public static WeatherData getWeatherForManualLocation(String location) throws CantGetWeatherException {
+
+        HttpURLConnection connection = null;
+        try {
+            connection = openUrlConnection(buildWeatherQueryUrlFromManualLocation(location));
+            XmlPullParser xpp = sXmlPullParserFactory.newPullParser();
+            xpp.setInput(new InputStreamReader(connection.getInputStream()));
+
+            WeatherData data = new WeatherData();
+            boolean hasTodayForecast = false;
+            int eventType = xpp.getEventType();
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG
+                        && "condition".equals(xpp.getName())) {
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("temp".equals(xpp.getAttributeName(i))) {
+                            data.temperature = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("code".equals(xpp.getAttributeName(i))) {
+                            data.conditionCode = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("text".equals(xpp.getAttributeName(i))) {
+                            data.conditionText = xpp.getAttributeValue(i);
+                        }
+                    }
+                } else if (eventType == XmlPullParser.START_TAG
+                        && "forecast".equals(xpp.getName())
+                        && !hasTodayForecast) {
+                    // TODO: verify this is the forecast for today (this currently assumes the
+                    // first forecast is today's forecast)
+                    hasTodayForecast = true;
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("code".equals(xpp.getAttributeName(i))) {
+                            data.todayForecastConditionCode
+                                    = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("low".equals(xpp.getAttributeName(i))) {
+                            data.low = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("high".equals(xpp.getAttributeName(i))) {
+                            data.high = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("text".equals(xpp.getAttributeName(i))) {
+                            data.forecastText = xpp.getAttributeValue(i);
+                        }
+                    }
+                } else if (eventType == XmlPullParser.START_TAG
+                        && "location".equals(xpp.getName())) {
+                    String cityOrVillage = "--";
+                    String region = null;
+                    String country = "--";
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("city".equals(xpp.getAttributeName(i))) {
+                            cityOrVillage = xpp.getAttributeValue(i);
+                        } else if ("region".equals(xpp.getAttributeName(i))) {
+                            region = xpp.getAttributeValue(i);
+                        } else if ("country".equals(xpp.getAttributeName(i))) {
+                            country = xpp.getAttributeValue(i);
+                        }
+                    }
+
+                    if (TextUtils.isEmpty(region)) {
+                        // If no region is available, show the country. Otherwise, don't
+                        // show country information.
+                        region = country;
+                    }
+
+                    /*if (!TextUtils.isEmpty(town) && !town.equals(cityOrVillage)) {
+                        // If a town is available and it's not equivalent to the city name,
+                        // show it.
+                        cityOrVillage = cityOrVillage + ", " + town;
+                    }*/
+
+                    data.location = cityOrVillage + ", " + region;
+                }
+                eventType = xpp.next();
+            }
+
+            /*if (TextUtils.isEmpty(data.location)) {
+                data.location = town;
+            }*/
+
+            return data;
+
+        } catch (IOException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } catch (NumberFormatException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } catch (XmlPullParserException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+
+    }
+
+    public static WeatherData getWeatherForCoords(double lat, double lng) throws CantGetWeatherException {
+
+        HttpURLConnection connection = null;
+        try {
+            connection = openUrlConnection(buildWeatherQueryUrlFromLocation(lat, lng));
+            XmlPullParser xpp = sXmlPullParserFactory.newPullParser();
+            xpp.setInput(new InputStreamReader(connection.getInputStream()));
+
+            WeatherData data = new WeatherData();
+            boolean hasTodayForecast = false;
+            int eventType = xpp.getEventType();
+            while (eventType != XmlPullParser.END_DOCUMENT) {
+                if (eventType == XmlPullParser.START_TAG
+                        && "condition".equals(xpp.getName())) {
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("temp".equals(xpp.getAttributeName(i))) {
+                            data.temperature = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("code".equals(xpp.getAttributeName(i))) {
+                            data.conditionCode = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("text".equals(xpp.getAttributeName(i))) {
+                            data.conditionText = xpp.getAttributeValue(i);
+                        }
+                    }
+                } else if (eventType == XmlPullParser.START_TAG
+                        && "forecast".equals(xpp.getName())
+                        && !hasTodayForecast) {
+                    // TODO: verify this is the forecast for today (this currently assumes the
+                    // first forecast is today's forecast)
+                    hasTodayForecast = true;
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("code".equals(xpp.getAttributeName(i))) {
+                            data.todayForecastConditionCode
+                                    = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("low".equals(xpp.getAttributeName(i))) {
+                            data.low = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("high".equals(xpp.getAttributeName(i))) {
+                            data.high = Integer.parseInt(xpp.getAttributeValue(i));
+                        } else if ("text".equals(xpp.getAttributeName(i))) {
+                            data.forecastText = xpp.getAttributeValue(i);
+                        }
+                    }
+                } else if (eventType == XmlPullParser.START_TAG
+                        && "location".equals(xpp.getName())) {
+                    String cityOrVillage = "--";
+                    String region = null;
+                    String country = "--";
+                    for (int i = xpp.getAttributeCount() - 1; i >= 0; i--) {
+                        if ("city".equals(xpp.getAttributeName(i))) {
+                            cityOrVillage = xpp.getAttributeValue(i);
+                        } else if ("region".equals(xpp.getAttributeName(i))) {
+                            region = xpp.getAttributeValue(i);
+                        } else if ("country".equals(xpp.getAttributeName(i))) {
+                            country = xpp.getAttributeValue(i);
+                        }
+                    }
+
+                    if (TextUtils.isEmpty(region)) {
+                        // If no region is available, show the country. Otherwise, don't
+                        // show country information.
+                        region = country;
+                    }
+
+                    /*if (!TextUtils.isEmpty(town) && !town.equals(cityOrVillage)) {
+                        // If a town is available and it's not equivalent to the city name,
+                        // show it.
+                        cityOrVillage = cityOrVillage + ", " + town;
+                    }*/
+
+                    data.location = cityOrVillage + ", " + region;
+                }
+                eventType = xpp.next();
+            }
+
+            /*if (TextUtils.isEmpty(data.location)) {
+                data.location = town;
+            }*/
+
+            return data;
+
+        } catch (IOException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } catch (NumberFormatException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } catch (XmlPullParserException e) {
+            throw new CantGetWeatherException(true, R.string.no_weather_data,
+                    "Error parsing weather feed XML.", e);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+
     }
 
     public static WeatherData getWeatherForWoeid(String woeid, String town)
@@ -405,6 +596,17 @@ public class YahooWeatherApiClient {
         }
 
         return results;
+    }
+
+
+    private static String buildWeatherQueryUrlFromLocation(double lat, double lng)
+    {
+        return "https://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20weather.forecast%20where%20woeid%20in%20(SELECT%20woeid%20FROM%20geo.places%20WHERE%20text%3D%22("+ lat +"%2C"+lng+")%22)%20and%20u%3D'" + sWeatherUnits + "'&format=xml&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys";
+    }
+
+    private static String buildWeatherQueryUrlFromManualLocation(String location)
+    {
+        return "https://query.yahooapis.com/v1/public/yql?q=select%20*%20from%20weather.forecast%20where%20woeid%20in%20(SELECT%20woeid%20FROM%20geo.places%20WHERE%20text%3D%22("+location+")%22)%20and%20u%3D'" + sWeatherUnits + "'&format=xml&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys";
     }
 
     private static String buildWeatherQueryUrl(String woeid) {

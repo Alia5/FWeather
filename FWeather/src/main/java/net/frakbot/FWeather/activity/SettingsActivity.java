@@ -66,7 +66,6 @@ import net.frakbot.FWeather.fragments.BackupPreferenceFragment;
 import net.frakbot.FWeather.fragments.CustomizationPreferencesFragment;
 import net.frakbot.FWeather.fragments.DataSyncPreferencesFragment;
 import net.frakbot.FWeather.fragments.InformationPreferencesFragment;
-import net.frakbot.FWeather.util.TrackerHelper;
 import net.frakbot.FWeather.util.WeatherLocationPreference;
 import net.frakbot.FWeather.util.WidgetHelper;
 import net.frakbot.global.Const;
@@ -357,7 +356,6 @@ public class SettingsActivity extends PreferenceActivity implements
         } else if (preference.getKey().equals(Const.Preferences.SYNC_FREQUENCY)) {
             value = Long.valueOf((String) newValue);
         }
-        TrackerHelper.preferenceChange(this, preference.getKey(), value);
     }
 
     /**

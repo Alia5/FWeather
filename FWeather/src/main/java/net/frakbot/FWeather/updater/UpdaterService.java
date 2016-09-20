@@ -53,7 +53,6 @@ import net.frakbot.FWeather.updater.weather.model.WeatherData;
 import net.frakbot.FWeather.util.AlarmHelper;
 import net.frakbot.FWeather.util.ConnectionHelper;
 import net.frakbot.FWeather.util.LocationHelper;
-import net.frakbot.FWeather.util.TrackerHelper;
 import net.frakbot.FWeather.util.WeatherHelper;
 import net.frakbot.FWeather.util.WidgetHelper;
 import net.frakbot.common.SantaLittleHelper;
@@ -133,8 +132,6 @@ public class UpdaterService extends IntentService {
 
         if (forced) {
             FLog.i(this, TAG, "User has requested a forced update");
-            TrackerHelper.sendEvent(this,
-                    TrackerHelper.CATEGORY_UPDATE, TrackerHelper.ACTION_DATA_REFRESH, TrackerHelper.LABEL_FORCE_REFRESH);
 
             // Show a toast message
             mHandler.post(new Runnable() {

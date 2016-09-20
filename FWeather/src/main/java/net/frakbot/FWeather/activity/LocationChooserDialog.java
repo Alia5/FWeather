@@ -187,6 +187,11 @@ public class LocationChooserDialog extends Activity
             }
 
             mResults = results;
+            LocationSearchResult locationSearchResult = new LocationSearchResult();
+            locationSearchResult.displayName = mQuery;
+            locationSearchResult.country = "Ahhhw fuck this!";
+            locationSearchResult.woeid = mQuery;
+            mResults.add(locationSearchResult);
             notifyDataSetChanged();
         }
 

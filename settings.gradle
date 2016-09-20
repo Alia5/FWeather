@@ -17,3 +17,5 @@
 
 
 include ':FWeather', ':WeatherProvider', ':wear', ':common'
+
+project(':common').projectDir = new File('common')

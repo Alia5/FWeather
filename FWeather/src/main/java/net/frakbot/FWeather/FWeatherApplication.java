@@ -22,7 +22,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.preference.PreferenceManager;
 import android.util.Log;
-import net.frakbot.FWeather.util.TrackerHelper;
+
 import net.frakbot.util.log.LogLevel;
 import net.frakbot.global.Const;
 import net.frakbot.util.log.FLog;
@@ -74,8 +74,6 @@ public class FWeatherApplication extends Application {
         PreferenceManager.setDefaultValues(this, R.xml.pref_customization, false);
         PreferenceManager.setDefaultValues(this, R.xml.pref_data_sync, false);
 
-        // Set the Google Analytics optout option as set by the user in the preferences
-        TrackerHelper.initGoogleAnalyticsOptout(this);
     }
 
     /**
